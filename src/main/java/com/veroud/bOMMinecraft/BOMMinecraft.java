@@ -2,26 +2,32 @@ package com.veroud.bOMMinecraft;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
+import java.io.File;
+import java.io.InputStream;
+import java.io.FileOutputStream;
 import java.net.URL;
-import java.util.stream.Collectors;
+import java.net.URLClassLoader;
+
+import java.util.concurrent.TimeUnit;
 
 public final class BOMMinecraft extends JavaPlugin {
 
     private String stationProduct;
     private String stationId;
-    private String lastWeather = ""; // track last applied weather
-    private String lastStationName = ""; // track station name
-
+    private String lastWeather = "";
+    private String lastStationName = "";
+    private final OkHttpClient client = new OkHttpClient.Builder()
+            .callTimeout(10, TimeUnit.SECONDS)
+            .build();
     @Override
     public void onEnable() {
         saveDefaultConfig();
@@ -32,32 +38,32 @@ public final class BOMMinecraft extends JavaPlugin {
         // Scheduled weather update every 5 minutes
         Bukkit.getScheduler().runTaskTimerAsynchronously(this, this::updateWeather, 0L, 6000L);
     }
-
     private void loadStationInfo() {
         FileConfiguration config = getConfig();
         stationProduct = config.getString("station_product", "IDQ60901");
         stationId = config.getString("station_id", "94576");
     }
 
+    // OkHttp-based fetch
     private String fetchWeatherJson() throws Exception {
-        String bomUrl = "http://www.bom.gov.au/fwo/" + stationProduct + "/" + stationProduct + "." + stationId + ".json";
-        URL url = new URL(bomUrl);
-        HttpURLConnection con = (HttpURLConnection) url.openConnection();
-        con.setRequestMethod("GET");
+        String bomUrl = "https://www.bom.gov.au/fwo/" + stationProduct + "/" + stationProduct + "." + stationId + ".json";
 
-        // Add a User-Agent to avoid 403
-        con.setRequestProperty("User-Agent", "Minecraft-BOM-Plugin/1.0 (https://github.com/Austayo/BOMMinecraft)");
+        Request request = new Request.Builder()
+                .url(bomUrl)
+                // Use a real browser User-Agent to bypass 403
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+                .header("Accept", "application/json")
+                .header("Connection", "keep-alive")
+                .build();
 
-        int responseCode = con.getResponseCode();
-        if (responseCode != 200) {
-            throw new Exception("Server returned HTTP response code: " + responseCode);
-        }
-
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()))) {
-            return in.lines().collect(Collectors.joining());
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new Exception("Failed to fetch BOM data: " + response.code());
+            }
+            return response.body().string();
         }
     }
-
 
     private void updateWeather() {
         try {
@@ -82,43 +88,47 @@ public final class BOMMinecraft extends JavaPlugin {
             double rain = data.get("rain_trace").isJsonNull() ? 0 : data.get("rain_trace").getAsDouble();
 
             World world = Bukkit.getWorlds().get(0);
-
             String newWeather;
 
             if (cloud.contains("thunder") || cloud.contains("thunderstorm") || rain > 5) {
-                // Heavy rain / thunderstorm
-                world.setStorm(true);
-                world.setThundering(true);
                 newWeather = "Thunderstorm";
             } else if ((cloud.contains("rain") || cloud.contains("showers") || cloud.contains("drizzle")) && rain > 1) {
-                // Moderate rain
-                world.setStorm(true);
-                world.setThundering(false);
                 newWeather = "Moderate Rain";
             } else if (rain > 0) {
-                // Light rain
-                world.setStorm(true);
-                world.setThundering(false);
                 newWeather = "Light Rain";
             } else if (cloud.contains("fog") || cloud.contains("haze")) {
-                world.setStorm(false);
-                world.setThundering(false);
                 newWeather = "Foggy/Clear";
             } else if (cloud.contains("snow") || cloud.contains("hail")) {
-                world.setStorm(true);
-                world.setThundering(false);
-                newWeather = "Snow/Hail"; // optional: spawn snow particles
+                newWeather = "Snow/Hail";
             } else {
-                world.setStorm(false);
-                world.setThundering(false);
                 newWeather = "Clear";
             }
 
-            // Only broadcast if weather or station changed
+            // Only schedule a Bukkit task if weather or station has changed
             if (!newWeather.equals(lastWeather) || !stationName.equals(lastStationName)) {
-                Bukkit.broadcastMessage("§b[BOM - " + stationName + "] Weather has changed to: §e" + newWeather + "§b!");
-                lastWeather = newWeather;
-                lastStationName = stationName;
+                String finalNewWeather = newWeather;
+                String finalStationName = stationName;
+
+                Bukkit.getScheduler().runTask(this, () -> {
+                    switch (finalNewWeather) {
+                        case "Thunderstorm" -> {
+                            world.setStorm(true);
+                            world.setThundering(true);
+                        }
+                        case "Moderate Rain", "Light Rain", "Snow/Hail" -> {
+                            world.setStorm(true);
+                            world.setThundering(false);
+                        }
+                        default -> {
+                            world.setStorm(false);
+                            world.setThundering(false);
+                        }
+                    }
+
+                    Bukkit.broadcastMessage("§b[BOM - " + finalStationName + "] Weather has changed to: §e" + finalNewWeather + "§b!");
+                    lastWeather = finalNewWeather;
+                    lastStationName = finalStationName;
+                });
             }
 
         } catch (Exception e) {
