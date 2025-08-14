@@ -77,7 +77,7 @@ Rain intensity is determined from BOM's rain_trace:
 
 1–5 mm → Moderate Rain
 
->5 mm → Thunderstorm
+5+ mm → Thunderstorm
 
 ## Notes
 
