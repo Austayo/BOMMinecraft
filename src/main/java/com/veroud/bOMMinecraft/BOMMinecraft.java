@@ -11,11 +11,6 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
-import java.io.File;
-import java.io.InputStream;
-import java.io.FileOutputStream;
-import java.net.URL;
-import java.net.URLClassLoader;
 
 import java.util.concurrent.TimeUnit;
 
@@ -32,7 +27,6 @@ public final class BOMMinecraft extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         loadStationInfo();
-
         getLogger().info("BOMMinecraft enabled! Using station " + stationProduct + " " + stationId);
 
         // Scheduled weather update every 5 minutes
@@ -82,7 +76,14 @@ public final class BOMMinecraft extends JavaPlugin {
             JsonObject data = observations.getAsJsonArray("data").get(0).getAsJsonObject();
             String stationName = observations.getAsJsonArray("header")
                     .get(0).getAsJsonObject()
-                    .get("product_name").getAsString();
+                    .get("name").getAsString(); // e.g., "Amberley"
+
+            String productName = observations.getAsJsonArray("header")
+                    .get(0).getAsJsonObject()
+                    .get("product_name").getAsString(); // e.g., "Weather Observations"
+
+// Combine them for display
+            String displayName = stationName + " - " + productName;
 
             String cloud = data.get("cloud").getAsString().toLowerCase();
             double rain = data.get("rain_trace").isJsonNull() ? 0 : data.get("rain_trace").getAsDouble();
@@ -125,7 +126,8 @@ public final class BOMMinecraft extends JavaPlugin {
                         }
                     }
 
-                    Bukkit.broadcastMessage("§b[BOM - " + finalStationName + "] Weather has changed to: §e" + finalNewWeather + "§b!");
+                    Bukkit.broadcastMessage("§b[BOM - " + displayName + "] Weather has changed to: §e" + newWeather + "§b!");
+
                     lastWeather = finalNewWeather;
                     lastStationName = finalStationName;
                 });
