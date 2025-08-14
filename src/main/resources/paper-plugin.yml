@@ -3,4 +3,15 @@ version: '1.0-SNAPSHOT'
 main: com.veroud.bOMMinecraft.BOMMinecraft
 api-version: '1.21'
 authors: [ Aidan Heaslip ]
-description: A aussie plugin for those looking to have their server weather reflect their local radar on bom.gov.au!
+description: An Aussie plugin that reflects real BOM weather on your Minecraft server.
+
+commands:
+  setidr:
+    description: Sets the BOM station product and station ID for weather syncing
+    usage: /setidr <product> <stationId>
+    permission: bomminecraft.setidr
+
+permissions:
+  bomminecraft.setidr:
+    description: Allows the player to change the BOM station used by the plugin
+    default: op
