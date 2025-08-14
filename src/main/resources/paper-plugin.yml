@@ -1,0 +1,6 @@
+name: BOMMinecraft
+version: '1.0-SNAPSHOT'
+main: com.veroud.bOMMinecraft.BOMMinecraft
+api-version: '1.21'
+authors: [ Aidan Heaslip ]
+description: A aussie plugin for those looking to have their server weather reflect their local radar on bom.gov.au!
