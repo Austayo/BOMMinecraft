@@ -45,10 +45,19 @@ public final class BOMMinecraft extends JavaPlugin {
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
         con.setRequestMethod("GET");
 
+        // Add a User-Agent to avoid 403
+        con.setRequestProperty("User-Agent", "Minecraft-BOM-Plugin/1.0 (https://github.com/Austayo/BOMMinecraft)");
+
+        int responseCode = con.getResponseCode();
+        if (responseCode != 200) {
+            throw new Exception("Server returned HTTP response code: " + responseCode);
+        }
+
         try (BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()))) {
             return in.lines().collect(Collectors.joining());
         }
     }
+
 
     private void updateWeather() {
         try {
