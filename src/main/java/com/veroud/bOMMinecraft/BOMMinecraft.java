@@ -69,74 +69,83 @@ public final class BOMMinecraft extends JavaPlugin {
     }
 
     private void applyWeather(String json) {
-        try {
-            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
-            JsonObject observations = root.getAsJsonObject("observations");
+    try {
+        JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+        JsonObject observations = root.getAsJsonObject("observations");
 
-            JsonObject data = observations.getAsJsonArray("data").get(0).getAsJsonObject();
-            String stationName = observations.getAsJsonArray("header")
-                    .get(0).getAsJsonObject()
-                    .get("name").getAsString(); // e.g., "Amberley"
+        JsonObject data = observations.getAsJsonArray("data").get(0).getAsJsonObject();
+        String stationName = observations.getAsJsonArray("header")
+                .get(0).getAsJsonObject()
+                .get("name").getAsString();
+        String productName = observations.getAsJsonArray("header")
+                .get(0).getAsJsonObject()
+                .get("product_name").getAsString();
+        String displayName = stationName + " - " + productName;
 
-            String productName = observations.getAsJsonArray("header")
-                    .get(0).getAsJsonObject()
-                    .get("product_name").getAsString(); // e.g., "Weather Observations"
+        String cloud = data.get("cloud").getAsString().toLowerCase();
+        String weather = data.get("weather").getAsString().toLowerCase();
+        double rain = data.get("rain_trace").isJsonNull() ? 0 : data.get("rain_trace").getAsDouble();
+        double windKmh = data.get("wind_spd_kmh").getAsDouble();
+        double temp = data.get("air_temp").getAsDouble();
 
-// Combine them for display
-            String displayName = stationName + " - " + productName;
+        getLogger().info("Raw BOM data: weather=" + weather + ", cloud=" + cloud + ", rain=" + rain + ", wind=" + windKmh + " km/h");
 
-            String cloud = data.get("cloud").getAsString().toLowerCase();
-            double rain = data.get("rain_trace").isJsonNull() ? 0 : data.get("rain_trace").getAsDouble();
+        World world = Bukkit.getWorlds().get(0);
+        String newWeather;
 
-            World world = Bukkit.getWorlds().get(0);
-            String newWeather;
-
-            if (cloud.contains("thunder") || cloud.contains("thunderstorm") || rain > 5) {
-                newWeather = "Thunderstorm";
-            } else if ((cloud.contains("rain") || cloud.contains("showers") || cloud.contains("drizzle")) && rain > 1) {
-                newWeather = "Moderate Rain";
-            } else if (rain > 0) {
-                newWeather = "Light Rain";
-            } else if (cloud.contains("fog") || cloud.contains("haze")) {
-                newWeather = "Foggy/Clear";
-            } else if (cloud.contains("snow") || cloud.contains("hail")) {
-                newWeather = "Snow/Hail";
-            } else {
-                newWeather = "Clear";
-            }
-
-            // Only schedule a Bukkit task if weather or station has changed
-            if (!newWeather.equals(lastWeather) || !stationName.equals(lastStationName)) {
-                String finalNewWeather = newWeather;
-                String finalStationName = stationName;
-
-                Bukkit.getScheduler().runTask(this, () -> {
-                    switch (finalNewWeather) {
-                        case "Thunderstorm" -> {
-                            world.setStorm(true);
-                            world.setThundering(true);
-                        }
-                        case "Moderate Rain", "Light Rain", "Snow/Hail" -> {
-                            world.setStorm(true);
-                            world.setThundering(false);
-                        }
-                        default -> {
-                            world.setStorm(false);
-                            world.setThundering(false);
-                        }
-                    }
-
-                    Bukkit.broadcastMessage("§b[BOM - " + displayName + "] Weather has changed to: §e" + newWeather + "§b!");
-
-                    lastWeather = finalNewWeather;
-                    lastStationName = finalStationName;
-                });
-            }
-
-        } catch (Exception e) {
-            getLogger().warning("Error applying weather: " + e.getMessage());
+        // Simplified and improved decision logic
+        if (weather.contains("thunder")) {
+            newWeather = "Thunderstorm";
+        } else if (weather.contains("shower") || weather.contains("rain") || weather.contains("drizzle")) {
+            newWeather = "Moderate Rain";
+        } else if (weather.contains("fog") || weather.contains("haze")) {
+            newWeather = "Foggy/Clear";
+        } else if (weather.contains("snow") || weather.contains("hail")) {
+            newWeather = "Snow/Hail";
+        } else {
+            newWeather = "Clear";
         }
+
+        if (!newWeather.equals(lastWeather) || !stationName.equals(lastStationName)) {
+            String finalNewWeather = newWeather;
+            String finalStationName = stationName;
+            Bukkit.getScheduler().runTask(this, () -> {
+                switch (finalNewWeather) {
+                    case "Thunderstorm" -> {
+                        world.setStorm(true);
+                        world.setThundering(true);
+                    }
+                    case "Moderate Rain", "Snow/Hail" -> {
+                        world.setStorm(true);
+                        world.setThundering(false);
+                    }
+                    default -> {
+                        world.setStorm(false);
+                        world.setThundering(false);
+                    }
+                }
+
+                StringBuilder message = new StringBuilder("§b[BOM - " + displayName + "] ");
+                message.append("§eWeather: §f").append(finalNewWeather);
+                message.append("§7 | §eTemp: §f").append(temp).append("°C");
+                message.append("§7 | §eWind: §f").append(windKmh).append(" km/h");
+
+                if (windKmh > 40) {
+                    message.append(" §c⚠ Strong Winds!");
+                }
+
+                Bukkit.broadcastMessage(message.toString());
+
+                lastWeather = finalNewWeather;
+                lastStationName = finalStationName;
+            });
+        }
+
+    } catch (Exception e) {
+        getLogger().warning("Error applying weather: " + e.getMessage());
     }
+}
+
 
 
     @Override
